@@ -1,15 +1,29 @@
 require("dotenv").config();
 const axios = require("axios");
 const TelegramBot = require("node-telegram-bot-api");
+const express = require("express");
 
-// Load Telegram and API tokens from .env
+// ------------------- Express Server -------------------
+const app = express();
+
+// Simple ping route to prevent idle
+app.get("/ping", (req, res) => {
+  res.send("ok");
+});
+
+// Start Express server on Render port or 3000
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+
+// ------------------- Telegram Bot -------------------
 const token = process.env.BOT_TOKEN;
 const tokenApi = process.env.API_TOKEN;
 
-// Initialize Telegram bot with polling
 const bot = new TelegramBot(token, { polling: true });
 
-// Array of Iranian months
+// Iranian months
 const iranianMonths = [
   "فروردین",
   "اردیبهشت",
@@ -25,7 +39,7 @@ const iranianMonths = [
   "اسفند",
 ];
 
-// Function to convert Persian digits to English digits
+// Convert Persian digits to English
 function persianNumberToEnglish(persianNum) {
   const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
   const englishDigits = "0123456789";
@@ -38,7 +52,7 @@ function persianNumberToEnglish(persianNum) {
     .join("");
 }
 
-// Function to convert English digits to Persian digits
+// Convert English digits to Persian
 function englishNumberToPersian(num) {
   const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
   return num
@@ -51,9 +65,9 @@ function englishNumberToPersian(num) {
     .join("");
 }
 
-// Function to convert Unix timestamp to HH:MM format in Persian digits
+// Format Unix timestamp to HH:MM in Persian
 function formatTimeToPersian(unixTimestamp) {
-  const date = new Date(unixTimestamp * 1000); // Convert seconds to milliseconds
+  const date = new Date(unixTimestamp * 1000);
   const hours = englishNumberToPersian(
     date.getHours().toString().padStart(2, "0")
   );
@@ -72,18 +86,18 @@ bot.onText(/\/start/, (msg) => {
   );
 });
 
-// Handle any other messages (city names)
+// Handle city messages
 bot.on("message", async (msg) => {
   const chatID = msg.chat.id;
   const city = msg.text;
 
-  // Format the message received time
+  // Format message received time
   const messageTime = formatTimeToPersian(msg.date);
 
   // Ignore commands (messages starting with /)
   if (!city.startsWith("/")) {
     try {
-      // Call the prayer times API
+      // Call prayer times API
       const response = await axios.get(
         `https://one-api.ir/owghat/?token=${tokenApi}&city=` +
           encodeURIComponent(city)
@@ -92,18 +106,15 @@ bot.on("message", async (msg) => {
       const cityData = response.data.result;
 
       if (cityData) {
-        // Convert Persian month to English number for array indexing
         const monthNumber = parseInt(
           persianNumberToEnglish(cityData.month),
           10
         );
-        // Convert Persian day to English, then back to Persian for consistent display
         const dayNumber = englishNumberToPersian(
           persianNumberToEnglish(cityData.day)
         );
         const monthName = iranianMonths[monthNumber - 1];
 
-        // Construct the message with Persian numbers and emojis
         const message =
           `📅 امروز ${dayNumber} ${monthName} ساعت ${messageTime}\n` +
           `🌇 اوقات شرعی به افق ${cityData.city}:\n` +
@@ -114,14 +125,11 @@ bot.on("message", async (msg) => {
           `🌙 اذان مغرب: ${cityData.azan_maghreb}\n` +
           `🕛 نیمه شب شرعی: ${cityData.nime_shabe_sharie}\n`;
 
-        // Send the message to the user
         bot.sendMessage(chatID, message);
       } else {
-        // If city is not found
         bot.sendMessage(chatID, "❌ شهر مورد نظر وجود ندارد!");
       }
     } catch (error) {
-      // Handle API or network errors
       console.error(error);
       bot.sendMessage(chatID, "⚠️ مشکلی در دریافت اطلاعات پیش آمد!");
     }
